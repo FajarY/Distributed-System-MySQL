@@ -157,7 +157,7 @@ def run():
         if(lost_connection_start_time != None):
             break
 
-        info("Connectivity is still okay, not is still not isolated")
+        info("Connectivity is still okay, node is still not isolated")
 
     while True:
         if(last_primary):
