@@ -2,12 +2,23 @@ import mysql.connector
 import time
 import threading
 import concurrent.futures
+import random
+import string
+
+def generate_random_string(n):
+    characters = string.ascii_letters + string.digits
+    result = ''.join(random.choices(characters, k=n))
+    
+    return result
 
 def info(str):
     print(f"[INFO] {str}")
 
 def failover(str):
     print(f"[FAILOVER] {str}")
+
+def warning(str):
+    print(f"[WARNING] {str}")
 
 nodes = {
     "192.168.100.2": {
@@ -71,10 +82,11 @@ def check_cluster_status():
                     return row["MEMBER_HOST"], rows
             
         except Exception as e:
-            info(f"Failed to check current primary on connection {key}, {e}")
+            # info(f"Failed to check current primary on connection {key}, {e}")
             pass
     return None
 
+last_success_host = None
 last_failed_host = None
 last_failed_insert_time = None
 target_check_count = 0
@@ -95,7 +107,7 @@ def check_replication_execute(row, start_time):
 
             delay_time = time.time() - start_time
 
-            info(f"Replication {row['MEMBER_HOST']} has syncronized {total_rows}/{target_check_count}, with ms {delay_time}")
+            info(f"Replication {row['MEMBER_HOST']} has syncronized {total_rows}/{target_check_count}, with delay {delay_time} seconds")
 
             if(total_rows >= target_check_count):
                 return {
@@ -126,17 +138,16 @@ def check_for_replication(rows):
 
     return checks
 
-
 def run_continous_insert():
-    global last_failed_host, last_failed_insert_time, target_check_count
-    
-    insert_data = []
-    for i in range(1000):
-        insert_data.append((f"Data batch replicate {i}",))
+    global last_failed_host, last_failed_insert_time, target_check_count, last_success_host
 
     last_total = 0
 
     while True:
+        insert_data = []
+        for i in range(1000):
+            insert_data.append((generate_random_string(512),))
+
         status = check_cluster_status()
         checking = None
 
@@ -146,7 +157,10 @@ def run_continous_insert():
 
             primary_host, rows = status
             info(f"Current primary is {primary_host}, trying to insert {len(insert_data)} rows")
-            
+
+            transaction_check_start_time = time.time()
+            transaction_total_time = 0
+
             connection = create_connection(primary_host)
             cursor = connection.cursor()
 
@@ -155,6 +169,7 @@ def run_continous_insert():
             """
 
             cursor.executemany(query, insert_data)
+            transaction_total_time += time.time() - transaction_check_start_time
 
             count_query = """
             SELECT COUNT(*) as total FROM main_table;
@@ -168,7 +183,11 @@ def run_continous_insert():
 
             checking = check_for_replication(rows)
 
+            transaction_check_start_time = time.time()
             connection.commit()
+            transaction_total_time += time.time() - transaction_check_start_time
+            info(f"Insert to primary {primary_host} transaction succeded in {transaction_total_time} seconds")
+
             last_total = total_rows
 
             cursor.close()
@@ -179,6 +198,13 @@ def run_continous_insert():
                 last_failed_insert_time = None
 
                 failover(f"Failover beginning cleared for {last_failed_host}, last time may just a slight network error")
+            
+            if(last_success_host == None):
+                last_success_host = primary_host
+
+            if(last_success_host != primary_host):
+                failover(f"Failover instantly cleared for {last_success_host}, the new primary is {primary_host}")
+                last_success_host = primary_host
 
         except Exception as e:
             target_check_count = last_total
@@ -218,15 +244,15 @@ def run_continous_insert():
                     max_failure_time = max(max_failure_time, future_val['latency'])
 
             if(total_success_count > 0):
-                info(f"Success count {total_success_count}, avg {total_success_time / total_success_count}, max {max_success_time}")
+                info(f"Success count {total_success_count}, avg {total_success_time / total_success_count}, max {max_success_time} seconds")
 
             if(total_failure_count > 0):
-                info(f"Failure count {total_failure_count}, avg {total_failure_time / total_failure_count}, max {max_failure_time}")
+                info(f"Failure count {total_failure_count}, avg {total_failure_time / total_failure_count}, max {max_failure_time} seconds")
 
         time.sleep(1)
 
 def failover_check():
-    global last_failed_host, last_failed_insert_time
+    global last_failed_host, last_failed_insert_time, last_success_host
     last_replication_count = None
 
     while True:
@@ -241,7 +267,7 @@ def failover_check():
                 last_replication_count = len(rows)
 
             if(last_replication_count != len(rows)):
-                failover(f"There was a change of members in the group, from {last_replication_count} to {len(rows)}")
+                warning(f"There was a change of members in the group, from {last_replication_count} to {len(rows)}")
                 last_replication_count = len(rows)
 
             if(last_failed_host == None):
@@ -251,6 +277,7 @@ def failover_check():
             if(primary_host != last_failed_host):
                 failover(f"Detected failover on node {last_failed_host}, failover time is {time.time() - last_failed_insert_time}, and the new primary node is {primary_host}")
 
+                last_success_host = None
                 last_failed_insert_time = None
                 last_failed_host = None
 
