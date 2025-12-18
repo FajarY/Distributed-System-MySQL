@@ -67,8 +67,8 @@ SET SQL_LOG_BIN=0;
 CREATE USER 'repl'@'%' IDENTIFIED WITH mysql_native_password BY 'password';
 GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';
 
-CREATE USER 'root'@'%' IDENTIFIED WITH mysql_native_password BY 'password';
-GRANT ALL PRIVILEGES ON *.* TO 'root'@'%' WITH GRANT OPTION;
+CREATE USER 'node'@'%' IDENTIFIED WITH mysql_native_password BY 'password';
+GRANT ALL PRIVILEGES ON *.* TO 'node'@'%' WITH GRANT OPTION;
 
 FLUSH PRIVILEGES;
 SET SQL_LOG_BIN=1;

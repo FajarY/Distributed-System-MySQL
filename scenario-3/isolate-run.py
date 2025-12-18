@@ -23,7 +23,7 @@ local_ip = None
 nodes = {
     "192.168.100.2": {
         "nodename": "node1",
-        "user": "root",
+        "user": "node",
         "password": "password",
         "host": "192.168.100.2",
         "port": 3306,
@@ -31,7 +31,7 @@ nodes = {
     },
     "192.168.100.3": {
         "nodename": "node2",
-        "user": "root",
+        "user": "node",
         "password": "password",
         "host": "192.168.100.3",
         "port": 3306,
@@ -39,7 +39,7 @@ nodes = {
     },
     "192.168.100.4": {
         "nodename": "node3",
-        "user": "root",
+        "user": "node",
         "password": "password",
         "host": "192.168.100.4",
         "port": 3306,
