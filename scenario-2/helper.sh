@@ -9,3 +9,13 @@ EOF
 mysql -u root << EOF
 START GROUP_REPLICATION;
 EOF
+
+mysql -u root << EOF
+SET GLOBAL group_replication_bootstrap_group=ON;
+START GROUP_REPLICATION;
+SET GLOBAL group_replication_bootstrap_group=OFF;
+EOF
+
+mysql -u root << EOF
+STOP GROUP_REPLICATION;
+EOF

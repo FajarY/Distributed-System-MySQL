@@ -1,6 +1,7 @@
 import mysql.connector
 import time
 import threading
+import concurrent.futures
 
 def info(str):
     print(f"[INFO] {str}")
@@ -76,18 +77,68 @@ def check_cluster_status():
 
 last_failed_host = None
 last_failed_insert_time = None
+target_check_count = 0
+
+def check_replication_execute(row, start_time):
+    try:
+        while True:
+            connection = create_connection(row["MEMBER_HOST"])
+            cursor = connection.cursor()
+
+            query = """
+            SELECT COUNT(*) as total FROM main_table;
+            """
+
+            cursor.execute(query)
+            result = cursor.fetchone()
+            total_rows = result[0]
+
+            delay_time = time.time() - start_time
+
+            info(f"Replication {row['MEMBER_HOST']} has syncronized {total_rows}/{target_check_count}, with ms {delay_time}")
+
+            if(total_rows >= target_check_count):
+                return {
+                    "host": row["MEMBER_HOST"],
+                    "latency": delay_time,
+                    "status": "success"
+                }
+
+    except Exception as e:
+        info(f"Failed when checking for replication syncronize status {e}")
+    
+    return {
+        "host": row["MEMBER_HOST"],
+        "latency": time.time() - start_time,
+        "status": "failed"
+    }
+
+def check_for_replication(rows):
+    checks = []
+    executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+
+    for row in rows:
+        if(row["MEMBER_ROLE"] == "PRIMARY"):
+            continue
+
+        future = executor.submit(check_replication_execute, row, time.time())
+        checks.append(future)
+
+    return checks
+
 
 def run_continous_insert():
-    global last_failed_host, last_failed_insert_time
+    global last_failed_host, last_failed_insert_time, target_check_count
     
     insert_data = []
-    for i in range(10000):
+    for i in range(1000):
         insert_data.append((f"Data batch replicate {i}",))
 
     last_total = 0
 
     while True:
         status = check_cluster_status()
+        checking = None
 
         try:
             if(status == None):
@@ -104,7 +155,6 @@ def run_continous_insert():
             """
 
             cursor.executemany(query, insert_data)
-            connection.commit()
 
             count_query = """
             SELECT COUNT(*) as total FROM main_table;
@@ -113,7 +163,12 @@ def run_continous_insert():
             result = cursor.fetchone()
             total_rows = result[0]
 
+            target_check_count = total_rows
             info(f"Insert to primary {primary_host} success, current total in primary database {total_rows}")
+
+            checking = check_for_replication(rows)
+
+            connection.commit()
             last_total = total_rows
 
             cursor.close()
@@ -126,6 +181,8 @@ def run_continous_insert():
                 failover(f"Failover beginning cleared for {last_failed_host}, last time may just a slight network error")
 
         except Exception as e:
+            target_check_count = last_total
+
             if(status != None and last_failed_host == None):
                 primary_host, rows = status
                 last_failed_host = primary_host
@@ -136,75 +193,35 @@ def run_continous_insert():
             info(f"Failed when continous inserting operation to primary, {e}")
             pass
 
-        try:
-            if(status == None):
-                raise Exception("There was a problem when checking replication sync, status of cluster is none")
-            
-            primary_host, rows = status
+        if(checking != None):
+            total_success_count = 0
+            total_failure_count = 0
 
-            failed_check = dict()
-            completed_check = dict()
-            start_time = time.time()
+            total_success_time = 0
+            total_failure_time = 0
+            max_success_time = 0
+            max_failure_time = 0
 
-            target_count_check = len(rows) - 1
-            info(f"Checking syncronization for {len(rows)} databases")
+            for future in checking:
+                future_val = future.result()
 
-            while(target_count_check > (len(failed_check) + len(completed_check))):
-                for row in rows:
-                    try:
-                        if(row["MEMBER_ROLE"] == "PRIMARY" or row["MEMBER_HOST"] in completed_check or row["MEMBER_HOST"] in failed_check):
-                            continue
+                if(future_val["status"] == 'success'):
+                    total_success_time += future_val['latency']
+                    info(f"Replication {future_val['host']} succesfully get the replication with delay {future_val['latency']}")
+                    total_success_count += 1
+                    max_success_time = max(max_success_time, future_val['latency'])
 
-                        connection = create_connection(row["MEMBER_HOST"])
-                        cursor = connection.cursor()
+                elif(future_val["status"] == 'failed'):
+                    total_failure_time += future_val['latency']
+                    info(f"Replication {future_val['host']} failed to get the replication with delay {future_val['latency']}")
+                    total_failure_count += 1
+                    max_failure_time = max(max_failure_time, future_val['latency'])
 
-                        count_query = """
-                        SELECT COUNT(*) as total FROM main_table;
-                        """
-                        cursor.execute(count_query)
-                        result = cursor.fetchone()
-                        total_rows = result[0]
+            if(total_success_count > 0):
+                info(f"Success count {total_success_count}, avg {total_success_time / total_success_count}, max {max_success_time}")
 
-                        latency = time.time() - start_time
-                        info(f"Replica {row['MEMBER_HOST']} has syncronized about {total_rows}/{last_total} rows from primary, ms from last insert : {latency}")
-
-                        if(total_rows == last_total):
-                            completed_check[row["MEMBER_HOST"]] = {
-                                "latency": latency
-                            }
-
-                        cursor.close()
-                        connection.close()
-
-                    except Exception as e:
-                        info(f"There was a problem when checksumming on replica {row['MEMBER_HOST']}, {e}")
-                        latency = time.time() - start_time
-                        failed_check[row["MEMBER_HOST"]] = {
-                            "latency": latency
-                        }
-
-            total_fail_latency = 0
-            max_fail_latency = 0
-            for key, val in failed_check.items():
-                info(f"Node {key} failed, with latency {val['latency']}")
-                total_fail_latency += val['latency']
-                max_fail_latency = max(max_fail_latency, val["latency"])
-            
-            if(len(failed_check) > 0):
-                info(f"Failed syncronization count: {len(failed_check)}, avg ms {total_fail_latency / len(failed_check)}, max ms {max_fail_latency}")
-
-            total_success_latency = 0
-            max_success_latency = 0
-            for key, val in completed_check.items():
-                info(f"Node {key} success, with latency {val['latency']}")
-                total_success_latency += val['latency']
-                max_success_latency = max(max_success_latency, val["latency"]);
-            
-            if(len(completed_check) > 0):
-                info(f"Success syncronization count: {len(completed_check)}, avg ms {total_success_latency / len(completed_check)}, max ms {max_success_latency}")
-
-        except Exception as e:
-            info(f"Failed when checking continous replica syncronization {e}")
+            if(total_failure_count > 0):
+                info(f"Failure count {total_failure_count}, avg {total_failure_time / total_failure_count}, max {max_failure_time}")
 
         time.sleep(1)
 
