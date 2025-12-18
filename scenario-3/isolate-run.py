@@ -69,7 +69,7 @@ def create_local_connection():
         config_pruned = {
             "user": config["user"],
             "password": config["password"],
-            "host": config["host"],
+            "host": "127.0.0.1",
             "port": config["port"],
             "database": config["database"],
             "connection_timeout": 2
@@ -117,16 +117,16 @@ def is_still_primary():
 
         for row in rows:
             if(row["MEMBER_HOST"] == local_ip and row["MEMBER_ROLE"] == "PRIMARY"):
-                return True
+                return 1
             if(row["MEMBER_HOST"] == local_ip and row["MEMBER_STATE"] == "ERROR"):
                 warning("Error detected for local node")
-                return False
+                return 2
 
     except Exception as e:
         info(f"There was an error when checking primary status {e}")
-        return False
+        return 0
 
-    return False
+    return 0
 
 def try_write_to_db():
     global local_ip
@@ -167,7 +167,7 @@ def run():
 
     while True:
         if(last_primary):
-            if(is_still_primary() == False):
+            if(is_still_primary() == 2):
                 last_primary = False
                 warning(f"Node is now not a primary after {time.time() - lost_connection_start_time}")
 
