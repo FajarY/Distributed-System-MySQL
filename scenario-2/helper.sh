@@ -5,3 +5,7 @@ EOF
 mysql -u root << EOF
 INSERT INTO testing.main_table(data) VALUES ("Insert testing");
 EOF
+
+mysql -u root << EOF
+START GROUP_REPLICATION;
+EOF

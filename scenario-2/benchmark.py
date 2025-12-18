@@ -2,6 +2,12 @@ import mysql.connector
 import time
 import threading
 
+def info(str):
+    print(f"[INFO] {str}")
+
+def failover(str):
+    print(f"[FAILOVER] {str}")
+
 nodes = {
     "192.168.100.2": {
         "nodename": "node1",
@@ -32,10 +38,16 @@ nodes = {
 def create_connection(node_host):
     try:
         config = nodes[node_host]
-        return mysql.connector.connect(**config)
+        config_pruned = {
+            "user": config["user"],
+            "password": config["password"],
+            "host": config["host"],
+            "port": config["port"],
+            "database": config["database"]
+        }
+        return mysql.connector.connect(**config_pruned)
     except Exception as e:
-        print(f"Failed to connect to {node_host} ({nodes[node_host]['nodename']}): {e}")
-        return None
+        raise e
 
 def check_cluster_status():
     for key, val in nodes.items():
@@ -45,7 +57,6 @@ def check_cluster_status():
 
             query = """
             SELECT MEMBER_HOST, MEMBER_STATE, MEMBER_ROLE FROM performance_schema.replication_group_members
-            WHERE MEMBER_STATE="ONLINE" AND MEMBER_ROLE="PRIMARY"
             """
 
             cursor.execute(query)
@@ -59,7 +70,7 @@ def check_cluster_status():
                     return row["MEMBER_HOST"], rows
             
         except Exception as e:
-            print(f"Failed to check current primary on connection {key}, {e}")
+            info(f"Failed to check current primary on connection {key}, {e}")
             pass
     return None
 
@@ -70,7 +81,7 @@ def run_continous_insert():
     global last_failed_host, last_failed_insert_time
     
     insert_data = []
-    for i in range(10):
+    for i in range(10000):
         insert_data.append((f"Data batch replicate {i}",))
 
     last_total = 0
@@ -83,7 +94,7 @@ def run_continous_insert():
                 raise Exception("There was a problem when trying to insert data, checking cluster status returns None")
 
             primary_host, rows = status
-            print(f"Current primary is {primary_host}, trying to insert {len(insert_data)} rows")
+            info(f"Current primary is {primary_host}, trying to insert {len(insert_data)} rows")
             
             connection = create_connection(primary_host)
             cursor = connection.cursor()
@@ -102,7 +113,7 @@ def run_continous_insert():
             result = cursor.fetchone()
             total_rows = result[0]
 
-            print(f"Insert to primary {primary_host} success, current total in primary database {total_rows}")
+            info(f"Insert to primary {primary_host} success, current total in primary database {total_rows}")
             last_total = total_rows
 
             cursor.close()
@@ -112,13 +123,17 @@ def run_continous_insert():
                 last_failed_host = None
                 last_failed_insert_time = None
 
+                failover(f"Failover beginning cleared for {last_failed_host}, last time may just a slight network error")
+
         except Exception as e:
             if(status != None and last_failed_host == None):
                 primary_host, rows = status
                 last_failed_host = primary_host
                 last_failed_insert_time = time.time()
 
-            print(f"Failed when continous inserting operation to primary, {e}")
+                failover(f"Detected failover beginning for {last_failed_host}")
+
+            info(f"Failed when continous inserting operation to primary, {e}")
             pass
 
         try:
@@ -126,13 +141,13 @@ def run_continous_insert():
                 raise Exception("There was a problem when checking replication sync, status of cluster is none")
             
             primary_host, rows = status
-            print(f"Checking syncronization for {len(rows)} databases")
 
             failed_check = dict()
             completed_check = dict()
             start_time = time.time()
 
-            target_count_check = len(rows)
+            target_count_check = len(rows) - 1
+            info(f"Checking syncronization for {len(rows)} databases")
 
             while(target_count_check > (len(failed_check) + len(completed_check))):
                 for row in rows:
@@ -151,45 +166,45 @@ def run_continous_insert():
                         total_rows = result[0]
 
                         latency = time.time() - start_time
-                        print(f"Replica {row["MEMBER_HOST"]} has syncronized about {total_rows}/{last_total} rows from primary, ms from last insert : {latency}")
+                        info(f"Replica {row['MEMBER_HOST']} has syncronized about {total_rows}/{last_total} rows from primary, ms from last insert : {latency}")
 
                         if(total_rows == last_total):
-                            completed_check.add(row["MEMBER_HOST"], {
-                                "latency": latency,
-                            })
+                            completed_check[row["MEMBER_HOST"]] = {
+                                "latency": latency
+                            }
 
                         cursor.close()
                         connection.close()
 
                     except Exception as e:
-                        print(f"There was a problem when checksumming on replica {row["MEMBER_HOST"]}, {e}")
+                        info(f"There was a problem when checksumming on replica {row['MEMBER_HOST']}, {e}")
                         latency = time.time() - start_time
-                        failed_check.add(row["MEMBER_HOST"], {
-                            "latency": latency,
-                        })
+                        failed_check[row["MEMBER_HOST"]] = {
+                            "latency": latency
+                        }
 
             total_fail_latency = 0
             max_fail_latency = 0
-            for key, val in completed_check:
-                print(f"Node {key} failed, with latency {val["latency"]}")
-                total_fail_latency += val["latency"]
-                max_fail_latency = max(max_fail_latency, val["latency"]);
+            for key, val in failed_check.items():
+                info(f"Node {key} failed, with latency {val['latency']}")
+                total_fail_latency += val['latency']
+                max_fail_latency = max(max_fail_latency, val["latency"])
             
             if(len(failed_check) > 0):
-                print(f"Failed syncronization count: {len(failed_check)}, avg ms {total_fail_latency / len(failed_check)}, max ms {max_fail_latency}")
+                info(f"Failed syncronization count: {len(failed_check)}, avg ms {total_fail_latency / len(failed_check)}, max ms {max_fail_latency}")
 
             total_success_latency = 0
             max_success_latency = 0
-            for key, val in completed_check:
-                print(f"Node {key} success, with latency {val["latency"]}")
-                total_success_latency += val["latency"]
+            for key, val in completed_check.items():
+                info(f"Node {key} success, with latency {val['latency']}")
+                total_success_latency += val['latency']
                 max_success_latency = max(max_success_latency, val["latency"]);
             
             if(len(completed_check) > 0):
-                print(f"Success syncronization count: {len(completed_check)}, avg ms {total_success_latency / len(completed_check)}, max ms {max_success_latency}")
+                info(f"Success syncronization count: {len(completed_check)}, avg ms {total_success_latency / len(completed_check)}, max ms {max_success_latency}")
 
         except Exception as e:
-            print(f"Failed when checking continous replica syncronization {e}")
+            info(f"Failed when checking continous replica syncronization {e}")
 
         time.sleep(1)
 
@@ -209,7 +224,7 @@ def failover_check():
                 last_replication_count = len(rows)
 
             if(last_replication_count != len(rows)):
-                print(f"There was a change of members in the group, from {last_replication_count} to {len(rows)}")
+                failover(f"There was a change of members in the group, from {last_replication_count} to {len(rows)}")
                 last_replication_count = len(rows)
 
             if(last_failed_host == None):
@@ -217,15 +232,15 @@ def failover_check():
                 continue
 
             if(primary_host != last_failed_host):
-                print(f"Detected failover on node {last_failed_host}, failover time is {time.time() - last_failed_insert_time}, and the new primary node is {primary_host}")
+                failover(f"Detected failover on node {last_failed_host}, failover time is {time.time() - last_failed_insert_time}, and the new primary node is {primary_host}")
 
                 last_failed_insert_time = None
                 last_failed_host = None
 
-            time.sleep(0.5)
-
         except Exception as e:
-            print(f"Failed when checking failover {e}")
+            failover(f"Failed when checking failover {e}")
+
+        time.sleep(0.5)
 
 if __name__ == "__main__":
     insert_check_thread = threading.Thread(target=run_continous_insert)
