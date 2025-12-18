@@ -55,7 +55,8 @@ def create_connection(node_host):
             "password": config["password"],
             "host": config["host"],
             "port": config["port"],
-            "database": config["database"]
+            "database": config["database"],
+            "connection_timeout": 2
         }
         return mysql.connector.connect(**config_pruned)
     except Exception as e:
@@ -70,7 +71,8 @@ def create_local_connection():
             "password": config["password"],
             "host": config["host"],
             "port": config["port"],
-            "database": config["database"]
+            "database": config["database"],
+            "connection_timeout": 2
         }
         return mysql.connector.connect(**config_pruned)
     except Exception as e:
