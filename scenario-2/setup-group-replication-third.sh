@@ -52,10 +52,10 @@ loose-group_replication_ip_allowlist = "0.0.0.0/0"
 loose-group_replication_group_seeds = "192.168.100.2:33061,192.168.100.3:33061,192.168.100.4:33061"
 
 # Host specific replication configuration
-server_id = 2
+server_id = 3
 bind-address = "0.0.0.0"
-report_host = "192.168.100.3"
-loose-group_replication_local_address = "192.168.100.3:33061"
+report_host = "192.168.100.4"
+loose-group_replication_local_address = "192.168.100.4:33061"
 EOF
 
 service mysql restart

@@ -81,6 +81,7 @@ SELECT * FROM performance_schema.replication_group_members;
 CREATE DATABASE testing;
 CREATE TABLE testing.main_table (
     id INT NOT NULL AUTO_INCREMENT,
-    data VARCHAR(512)
+    data VARCHAR(512),
+    PRIMARY KEY(id)
 );
 EOF
