@@ -1,5 +1,6 @@
 #!/bin/bash
 
+#Run in bridge
 apt-get update -y
 apt-get install bridge-utils -y
 
