@@ -158,6 +158,7 @@ def run():
             break
 
         info("Connectivity is still okay, node is still not isolated")
+        time.sleep(0.5)
 
     while True:
         if(last_primary):
@@ -166,6 +167,7 @@ def run():
                 warning(f"Node is now not a primary after {time.time() - lost_connection_start_time}")
 
         try_write_to_db()
+        time.sleep(0.5)
 
 if __name__ == "__main__":
     if(len(sys.argv) <= 1):
