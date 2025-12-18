@@ -62,7 +62,7 @@ service mysql restart
 
 mysql -u root << EOF
 SET SQL_LOG_BIN=0;
-CREATE USER 'repl'@'%' IDENTIFIED BY 'password';
+CREATE USER 'repl'@'%' IDENTIFIED WITH mysql_native_password BY 'password';
 GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';
 FLUSH PRIVILEGES;
 SET SQL_LOG_BIN=1;
