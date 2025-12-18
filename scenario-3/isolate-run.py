@@ -104,7 +104,7 @@ def is_still_primary():
 
     try:
         connection = create_local_connection()
-        cursor = connection.cursor()
+        cursor = connection.cursor(dictionary=True)
 
         query = """
         SELECT MEMBER_HOST, MEMBER_STATE, MEMBER_ROLE FROM performance_schema.replication_group_members
@@ -118,6 +118,9 @@ def is_still_primary():
         for row in rows:
             if(row["MEMBER_HOST"] == local_ip and row["MEMBER_ROLE"] == "PRIMARY"):
                 return True
+            if(row["MEMBER_HOST"] == local_ip and row["MEMBER_STATE"] == "ERROR"):
+                warning("Error detected for local node")
+                return False
 
     except Exception as e:
         info(f"There was an error when checking primary status {e}")
