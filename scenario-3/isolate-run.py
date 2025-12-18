@@ -150,7 +150,7 @@ def try_write_to_db():
         cursor.close()
         connection.close()
     except Exception as e:
-        info(f"There was an error when creating local connection, {e}")
+        info(f"There was an error when inserting with local connection, {e}")
         pass
 
 def run():
@@ -167,12 +167,12 @@ def run():
         time.sleep(0.5)
 
     while True:
+        try_write_to_db()
         if(last_primary):
             if(is_still_primary() == 2):
                 last_primary = False
                 warning(f"Node is now not a primary after {time.time() - lost_connection_start_time}")
-
-        try_write_to_db()
+                
         time.sleep(0.5)
 
 if __name__ == "__main__":
