@@ -45,6 +45,8 @@ loose-group_replication_ssl_mode = DISABLED
 loose-group_replication_recovery_use_ssl = 0
 loose-group_replication_single_primary_mode = ON
 loose-group_replication_enforce_update_everywhere_checks = OFF
+loose-group_replication_unreachable_majority_timeout = 10
+loose-group_replication_member_expel_timeout = 10
 
 # Shared replication group configuration
 loose-group_replication_group_name = "8f6aa414-8097-4809-b209-db7bd286d347"
