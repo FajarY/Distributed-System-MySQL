@@ -179,7 +179,7 @@ def run_continous_insert():
             total_rows = result[0]
 
             target_check_count = total_rows
-            info(f"Insert to primary {primary_host} success, current total in primary database {total_rows}")
+            info(f"Preparing insert to primary {primary_host} success, current total expected in primary database {total_rows}")
 
             checking = check_for_replication(rows)
 
