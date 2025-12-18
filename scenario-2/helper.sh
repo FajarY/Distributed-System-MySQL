@@ -19,3 +19,8 @@ EOF
 mysql -u root << EOF
 STOP GROUP_REPLICATION;
 EOF
+
+mysql -u root << EOF
+CREATE USER 'node'@'%' IDENTIFIED WITH mysql_native_password BY 'password';
+GRANT ALL PRIVILEGES ON *.* TO 'node'@'%' WITH GRANT OPTION;
+EOF
