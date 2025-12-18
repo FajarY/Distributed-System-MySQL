@@ -69,7 +69,7 @@ def create_local_connection():
         config_pruned = {
             "user": config["user"],
             "password": config["password"],
-            "host": "127.0.0.1",
+            "host": config["host"],
             "port": config["port"],
             "database": config["database"],
             "connection_timeout": 2
