@@ -69,10 +69,11 @@ def create_local_connection():
         config_pruned = {
             "user": config["user"],
             "password": config["password"],
-            "host": config["host"],
+            "host": "127.0.0.1",
             "port": config["port"],
             "database": config["database"],
-            "connection_timeout": 2
+            "connection_timeout": 2,
+            "auth_plugin": "mysql_native_password"
         }
         return mysql.connector.connect(**config_pruned)
     except Exception as e:
