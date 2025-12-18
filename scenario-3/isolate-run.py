@@ -93,7 +93,7 @@ def check_for_connectivity():
             
             connection.close()
         except Exception as e:
-            if(lost_connection_start_time):
+            if(lost_connection_start_time == None):
                 lost_connection_start_time = time.time()
                 warning(f"Isolation detected, Lost connectivity to connect to {key}")
 
