@@ -186,7 +186,6 @@ def run():
     
     print(f"{'Replication Lag':<25} | {'-':<18} | {fmt_lag(r1_lag):<18} | {fmt_lag(r2_lag):<18}")
     print(f"{'Row Count':<25} | {str(primary_count):<18} | {str(r1_count):<18} | {str(r2_count):<18}") 
-    print(f"{'First Read Status':<25} | {'CONSISTENT':<18} | {r1_status:<18} | {r2_status:<18}")
     
     print("-" * 85)
     print(f"FINAL STATE: {'EVENTUALLY CONSISTENT' if (primary_count == r1_count == r2_count) else 'DATA LOSS / SYNC FAIL'}")
