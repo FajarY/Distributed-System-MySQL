@@ -1,5 +1,8 @@
 #!/bin/bash
 
+apt-get update -y
+apt-get install mysql-server -y
+
 touch /etc/mysql/my.cnf
 cat <<EOF > /etc/mysql/my.cnf
 [mysqld]
