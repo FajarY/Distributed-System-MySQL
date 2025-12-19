@@ -85,7 +85,7 @@ def check_replication_execute(node_key, start_time):
             total_rows = cursor.fetchone()[0]
 
             if attempt == 1:
-                first_read_status = total_rows
+                first_read_count = total_rows
 
             delay_time = time.time() - start_time
             if delay_time < 0: 
@@ -98,7 +98,7 @@ def check_replication_execute(node_key, start_time):
                     "key": node_key,
                     "latency": delay_time * 1000,
                     "count": total_rows,
-                    "first_count": first_read_status, 
+                    "first_count": first_read_count, 
                     "status": "success"
                 }
             
@@ -147,6 +147,9 @@ def run():
     futures = []
     results = {} 
 
+    cursor.execute(f"SELECT COUNT(*) FROM {TABLE_NAME}")
+    first_primary_count = cursor.fetchone()[0]
+    
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
         f1 = executor.submit(check_replication_execute, 'replica1', workload_end)
         f2 = executor.submit(check_replication_execute, 'replica2', workload_end)
@@ -181,7 +184,7 @@ def run():
     r1_first = results.get('replica1', {}).get('first_count', '-')
     r2_first = results.get('replica2', {}).get('first_count', '-')
     
-    print(f"{'First Read Count':<25} | {str(primary_count):<18} | {r1_first:<18} | {r2_first:<18}")
+    print(f"{'First Read Count':<25} | {str(first_primary_count):<18} | {r1_first:<18} | {r2_first:<18}")
     print(f"{'Last Read Count':<25} | {str(primary_count):<18} | {str(r1_count):<18} | {str(r2_count):<18}") 
     print(f"{'Replication Lag':<25} | {'-':<18} | {fmt_lag(r1_lag):<18} | {fmt_lag(r2_lag):<18}")
     
