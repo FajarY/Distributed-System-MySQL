@@ -74,7 +74,7 @@ def check_replication_execute(node_key, start_time):
         
         timeout_start = time.time()
         attempt = 0 
-        first_read_status = "UNKNOWN"
+        first_read_count = 0
 
         while (time.time() - timeout_start) < 10:
             attempt += 1 
@@ -85,10 +85,7 @@ def check_replication_execute(node_key, start_time):
             total_rows = cursor.fetchone()[0]
 
             if attempt == 1:
-                if total_rows >= TOTAL_ROWS:
-                    first_read_status = "CONSISTENT"
-                else:
-                    first_read_status = "INCONSISTENT" 
+                first_read_status = total_rows
 
             delay_time = time.time() - start_time
             if delay_time < 0: 
@@ -101,7 +98,7 @@ def check_replication_execute(node_key, start_time):
                     "key": node_key,
                     "latency": delay_time * 1000,
                     "count": total_rows,
-                    "read_status": first_read_status, 
+                    "first_count": first_read_status, 
                     "status": "success"
                 }
             
@@ -117,7 +114,7 @@ def check_replication_execute(node_key, start_time):
         "key": node_key,
         "latency": None,
         "count": 0,
-        "read_status": "TIMEOUT",
+        "first_count": 0,
         "status": "failed"
     }
 
@@ -181,11 +178,12 @@ def run():
     r1_count = results.get('replica1', {}).get('count', 0)
     r2_count = results.get('replica2', {}).get('count', 0)
 
-    r1_status = results.get('replica1', {}).get('read_status', '-')
-    r2_status = results.get('replica2', {}).get('read_status', '-')
+    r1_first = results.get('replica1', {}).get('first_count', '-')
+    r2_first = results.get('replica2', {}).get('first_count', '-')
     
+    print(f"{'First Read Count':<25} | {str(primary_count):<18} | {r1_first:<18} | {r2_first:<18}")
+    print(f"{'Last Read Count':<25} | {str(primary_count):<18} | {str(r1_count):<18} | {str(r2_count):<18}") 
     print(f"{'Replication Lag':<25} | {'-':<18} | {fmt_lag(r1_lag):<18} | {fmt_lag(r2_lag):<18}")
-    print(f"{'Row Count':<25} | {str(primary_count):<18} | {str(r1_count):<18} | {str(r2_count):<18}") 
     
     print("-" * 85)
     print(f"FINAL STATE: {'EVENTUALLY CONSISTENT' if (primary_count == r1_count == r2_count) else 'DATA LOSS / SYNC FAIL'}")
